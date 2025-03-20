@@ -1,0 +1,150 @@
+// Project Structure:
+// lib/
+// ├── data/
+// │   ├── models/
+// │   │   └── post_model.dart
+// │   ├── repositories/
+// │   │   └── post_repository.dart
+// ├── logic/
+// │   ├── cubit/
+// │   │   └── post_cubit.dart
+// ├── presentation/
+// │   ├── screens/
+// │   │   └── post_screen.dart
+// └── main.dart
+
+// post_model.dart
+class Post {
+  final int id;
+  final String title;
+
+  Post({required this.id, required this.title});
+
+  factory Post.fromJson(Map<String, dynamic> json) {
+    return Post(id: json['id'], title: json['title']);
+  }
+}
+
+// post_repository.dart
+import 'dart:convert';
+import 'package:http/http.dart' as http;
+import '../models/post_model.dart';
+
+class PostRepository {
+  Future<List<Post>> fetchPosts() async {
+    final response = await http.get(Uri.parse('https://jsonplaceholder.typicode.com/posts'));
+
+    if (response.statusCode == 200) {
+      List<dynamic> data = jsonDecode(response.body);
+      return data.map((json) => Post.fromJson(json)).toList();
+    } else {
+      throw Exception('Failed to load posts');
+    }
+  }
+}
+
+// post_cubit.dart
+import 'package:bloc/bloc.dart';
+import '../../data/models/post_model.dart';
+import '../../data/repositories/post_repository.dart';
+
+part 'post_state.dart';
+
+class PostCubit extends Cubit<PostState> {
+  final PostRepository repository;
+
+  PostCubit(this.repository) : super(PostInitial());
+
+  void fetchPosts() async {
+    try {
+      emit(PostLoading());
+      final posts = await repository.fetchPosts();
+      emit(PostLoaded(posts));
+    } catch (e) {
+      emit(PostError(e.toString()));
+    }
+  }
+}
+
+// post_state.dart
+part of 'post_cubit.dart';
+
+abstract class PostState {}
+
+class PostInitial extends PostState {}
+
+class PostLoading extends PostState {}
+
+class PostLoaded extends PostState {
+  final List<Post> posts;
+  PostLoaded(this.posts);
+}
+
+class PostError extends PostState {
+  final String message;
+  PostError(this.message);
+}
+
+// post_screen.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import '../../logic/cubit/post_cubit.dart';
+
+class PostScreen extends StatelessWidget {
+  const PostScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(title: const Text('Posts')),
+      body: BlocBuilder<PostCubit, PostState>(
+        builder: (context, state) {
+          if (state is PostLoading) {
+            return const Center(child: CircularProgressIndicator());
+          } else if (state is PostLoaded) {
+            return ListView.builder(
+              itemCount: state.posts.length,
+              itemBuilder: (context, index) {
+                return ListTile(
+                  title: Text(state.posts[index].title),
+                );
+              },
+            );
+          } else if (state is PostError) {
+            return Center(child: Text('Error: ${state.message}'));
+          }
+          return const Center(child: Text('Press the button to load posts.'));
+        },
+      ),
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => context.read<PostCubit>().fetchPosts(),
+        child: const Icon(Icons.download),
+      ),
+    );
+  }
+}
+
+// main.dart
+import 'package:flutter/material.dart';
+import 'package:flutter_bloc/flutter_bloc.dart';
+import 'data/repositories/post_repository.dart';
+import 'logic/cubit/post_cubit.dart';
+import 'presentation/screens/post_screen.dart';
+
+void main() {
+  runApp(MyApp());
+}
+
+class MyApp extends StatelessWidget {
+  const MyApp({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return MaterialApp(
+      home: BlocProvider(
+        create: (context) => PostCubit(PostRepository()),
+        child: const PostScreen(),
+      ),
+    );
+  }
+}
