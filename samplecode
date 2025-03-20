@@ -41,7 +41,45 @@ class PostRepository {
       throw Exception('Failed to load posts');
     }
   }
+
+//login post method 
+
+  Future<User> login(String username, String password) async {
+    final response = await http.post(
+      Uri.parse('https://reqres.in/api/login'),
+      body: {'email': username, 'password': password},
+    );
+
+    if (response.statusCode == 200) {
+      return User.fromJson(jsonDecode(response.body));
+    } else {
+      throw Exception('Login failed');
+    }
+  }
 }
+
+
+//auth cubit 
+
+
+class AuthCubit extends Cubit<AuthState> {
+  final AuthRepository repository;
+
+  AuthCubit(this.repository) : super(AuthInitial());
+
+  void login(String username, String password) async {
+    try {
+      emit(AuthLoading());
+      final user = await repository.login(username, password);
+      emit(AuthSuccess(user));
+    } catch (e) {
+      emit(AuthFailure(e.toString()));
+    }
+  }
+}
+
+
+
 
 // post_cubit.dart
 import 'package:bloc/bloc.dart';
@@ -64,6 +102,27 @@ class PostCubit extends Cubit<PostState> {
       emit(PostError(e.toString()));
     }
   }
+}
+
+
+
+// auth_state.dart
+part of 'auth_cubit.dart';
+
+abstract class AuthState {}
+
+class AuthInitial extends AuthState {}
+
+class AuthLoading extends AuthState {}
+
+class AuthSuccess extends AuthState {
+  final User user;
+  AuthSuccess(this.user);
+}
+
+class AuthFailure extends AuthState {
+  final String error;
+  AuthFailure(this.error);
 }
 
 // post_state.dart
